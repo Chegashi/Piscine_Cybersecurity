@@ -3,12 +3,10 @@
 from sys import argv
 import httplib2
 from bs4 import BeautifulSoup, SoupStrainer
+import urllib.request
+import os
+from urllib.parse import urljoin, urlparse
 
-
-# class spider_parser:
-#     def __init__(self, argv):
-#         pass
-        
 def parse_arg(argv):
     recursively_len = 1
     path = './'
@@ -18,7 +16,6 @@ def parse_arg(argv):
         if argv[i] == '-r':
             recursively_len = 5
         elif argv[i] == '-l':
-            # print(i + 1 < len(argv),  argv[i + 1].isdigit())
             if i + 1 < len(argv) and argv[i + 1].isdigit():
                 recursively_len = int(argv[i + 1])
                 i += 1
@@ -28,6 +25,7 @@ def parse_arg(argv):
         elif argv[i] == '-p':
             if i + 1 < len(argv):
                 path = argv[i + 1]
+                i += 1
             else:
                 print("Invalid argument for -p")
                 exit(1)
@@ -42,32 +40,46 @@ def parse_arg(argv):
         exit(1)
     return recursively_len, path, url
 
-def spider(recursively : int, url: str, path:str, urls=[]):
-    # for i in  range (recursively, 0, -1):
+def spider_url(recursively, url, path, urls=[]):
     print(f"{recursively} --> {url}")
     try:
+        urls = spider_img(url, path, urls)
         http = httplib2.Http()
         status, response = http.request(url)
         for link in BeautifulSoup(response, 'html.parser', parse_only=SoupStrainer('a')):
             if link.has_attr('href'):
-                href = link['href']
-                if href.startswith('/') or href.startswith('#'):
-                    href = url + href
-                urls.append(href)
-                if recursively - 1 > 0:
-                    spider(recursively -1, href, path)
+                href = urljoin(url, link['href'])
+                if href not in urls and urlparse(href).netloc == urlparse(url).netloc:
+                    urls.append(href)
+                    if recursively - 1 > 0:
+                        spider_url(recursively - 1, href, path)
     except Exception as e:
-        print(f"Error: {e} with {href} ")
+        print(f"Error: {e} with URL: {url}")
     return urls
-        
-                
-def main():
-    pass
 
-if __name__ == '__main__':
+def spider_img(url, path, urls=[]):
+    try:
+        os.makedirs(path, exist_ok=True)
+        http = httplib2.Http()
+        status, response = http.request(url)
+        for img in BeautifulSoup(response, 'html.parser', parse_only=SoupStrainer('img')):
+
+            if img.has_attr('src'):
+                href = urljoin(url, img['src'])
+                if href not in urls and href.split('.')[-1] in [' jpg', 'jpeg','png', 'gif', 'bmp']:
+                    urls.append(href)
+                    filename = os.path.join(path, href.split("/")[-1].split("?")[0])
+                    urllib.request.urlretrieve(href, filename)
+        return urls
+    except Exception as e:
+        print(f"Error: {e} with URL: {url}")
+    return urls
+
+def main():
     recursively_len, path, url = parse_arg(argv)
-    print(f"maximum depth level : {recursively_len}\nPATH: {path}\n URL: {url}")
-    t = spider(recursively_len, url, path)
+    print(f"Maximum depth level: {recursively_len}\nPATH: {path}\nURL: {url}")
+    t = spider_url(recursively_len, url, path)
     print("\n".join(t))
 
-
+if __name__ == '__main__':
+    main()
