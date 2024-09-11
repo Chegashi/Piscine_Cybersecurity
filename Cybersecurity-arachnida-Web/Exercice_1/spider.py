@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 
+import requests
+from fake_useragent import UserAgent
+import shutil
 from sys import argv
-import httplib2
-from bs4 import BeautifulSoup, SoupStrainer
-import urllib.request
+from bs4 import BeautifulSoup
 import os
 from urllib.parse import urljoin, urlparse
+
+ua = UserAgent()
+chrome_uas = ua.chrome
+request_headers = {
+    'user-agent': chrome_uas
+}
 
 def parse_arg(argv):
     recursively_len = 1
@@ -42,17 +49,16 @@ def parse_arg(argv):
 
 def spider_url(recursively, url, path, urls=[]):
     print(f"{recursively} --> {url}")
+    urls = spider_img(url, path, urls)
     try:
-        urls = spider_img(url, path, urls)
-        http = httplib2.Http()
-        status, response = http.request(url)
-        for link in BeautifulSoup(response, 'html.parser', parse_only=SoupStrainer('a')):
-            if link.has_attr('href'):
-                href = urljoin(url, link['href'])
-                if href not in urls and urlparse(href).netloc == urlparse(url).netloc:
-                    urls.append(href)
-                    if recursively - 1 > 0:
-                        spider_url(recursively - 1, href, path)
+        response = requests.get(url, headers=request_headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for link in soup.find_all('a', href=True):
+            href = urljoin(url, link['href'])
+            if href not in urls and urlparse(href).netloc == urlparse(url).netloc:
+                urls.append(href)
+                if recursively - 1 > 0:
+                    spider_url(recursively - 1, href, path)
     except Exception as e:
         print(f"Error: {e} with URL: {url}")
     return urls
@@ -60,16 +66,17 @@ def spider_url(recursively, url, path, urls=[]):
 def spider_img(url, path, urls=[]):
     try:
         os.makedirs(path, exist_ok=True)
-        http = httplib2.Http()
-        status, response = http.request(url)
-        for img in BeautifulSoup(response, 'html.parser', parse_only=SoupStrainer('img')):
-
-            if img.has_attr('src'):
-                href = urljoin(url, img['src'])
-                if href not in urls and href.split('.')[-1] in [' jpg', 'jpeg','png', 'gif', 'bmp']:
-                    urls.append(href)
-                    filename = os.path.join(path, href.split("/")[-1].split("?")[0])
-                    urllib.request.urlretrieve(href, filename)
+        response = requests.get(url, headers=request_headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for img in soup.find_all('img', src=True):
+            img_url = urljoin(url, img['src'])
+            if img_url not in urls and img_url.split('.')[-1].lower() in ['jpg', 'jpeg', 'png', 'gif', 'bmp']:
+                urls.append(img_url)
+                filename = os.path.join(path, img_url.split("/")[-1].split("?")[0])
+                img_response = requests.get(img_url, stream=True)
+                with open(filename, 'wb') as out_file:
+                    shutil.copyfileobj(img_response.raw, out_file)
+                del img_response
         return urls
     except Exception as e:
         print(f"Error: {e} with URL: {url}")
