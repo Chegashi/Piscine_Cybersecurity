@@ -25,7 +25,7 @@ def main():
     if len(argv) != 2:
         print("Usage: python3 scorpion.py <image_path>")
         exit(1)
-    
+
     image_path = argv[1]
     exif_data = extract_exif(image_path)
     print_exif(exif_data)
