@@ -1,34 +1,68 @@
 #!/usr/bin/env python3
 
-from PIL import Image, ExifTags
-from sys import argv, exit
+import os
+import sys
+from PIL import Image
+from PIL.ExifTags import TAGS
 
-def extract_exif(image_path):
+EXIF_SUPPORTED_FORMATS = ['JPEG', 'TIFF']
+
+def get_exif_data(img):
+    """Extract EXIF data from an image file if supported."""
     try:
-        img = Image.open(image_path)
+        if img.format not in EXIF_SUPPORTED_FORMATS:
+            return None
         exif_data = img._getexif()
-        if not exif_data:
-            return "No EXIF metadata found in the image."
-        exif = {ExifTags.TAGS.get(k, k): v for k, v in exif_data.items() if k in ExifTags.TAGS}
-        return exif
+        if exif_data:
+            exif = {}
+            for tag, value in exif_data.items():
+                tag_name = TAGS.get(tag, tag)
+                exif[tag_name] = value
+            return exif
+        return None
+    except AttributeError:
+        return None
     except Exception as e:
-        return f"Error processing the image: {e}"
+        print(f"Error extracting EXIF data: {e}")
+        return None
 
-def print_exif(exif_data):
-    if isinstance(exif_data, dict):
-        for tag, value in exif_data.items():
-            print(f"{tag}: {value}")
-    else:
-        print(exif_data)
+def display_basic_info(img):
+    """Display basic image attributes such as size, width, and height."""
+    width, height = img.size
+    print(f"Width: {width} px")
+    print(f"Height: {height} px")
+
+def display_metadata(file):
+    """Display metadata including EXIF data and basic info for a given image file."""
+    try:
+        file_stats = os.stat(file)
+        print(f"\nFile: {file}")
+        print(f"Size: {file_stats.st_size} bytes")
+        print(f"Created: {os.path.getctime(file)}")
+        print(f"Last Modified: {os.path.getmtime(file)}")
+        img = Image.open(file)
+        print(f"Image Format: {img.format}")
+        exif = get_exif_data(img)
+        if exif:
+            print("EXIF Data:")
+            for key, value in exif.items():
+                print(f"{key}: {value}")
+        else:
+            print(f"No EXIF data found or EXIF not supported for {img.format} files.")
+        display_basic_info(img)
+    except Exception as e:
+        print(f"Error displaying metadata: {e}")
 
 def main():
-    if len(argv) != 2:
-        print("Usage: python3 scorpion.py <image_path>")
-        exit(1)
+    if len(sys.argv) < 2:
+        print("Usage: ./scorpion.py FILE1 [FILE2 ...]")
+        sys.exit(1)
 
-    image_path = argv[1]
-    exif_data = extract_exif(image_path)
-    print_exif(exif_data)
+    for file in sys.argv[1:]:
+        if os.path.isfile(file):
+            display_metadata(file)
+        else:
+            print(f"File not found: {file}")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
