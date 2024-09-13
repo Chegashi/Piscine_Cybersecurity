@@ -15,15 +15,15 @@ request_headers = {
 }
 
 def parse_arg(argv):
-    recursively_len = 1
-    path = './'
+    recursively_len = None
+    path = './data/'
     url = None
 
     for i in range(1, len(argv)):
         if argv[i] == '-r':
             recursively_len = 5
         elif argv[i] == '-l':
-            if i + 1 < len(argv) and argv[i + 1].isdigit():
+            if i + 1 < len(argv) and argv[i + 1].isdigit() and recursively_len:
                 recursively_len = int(argv[i + 1])
                 i += 1
             else:
@@ -45,6 +45,8 @@ def parse_arg(argv):
     if not url:
         print("Error: URL is missing")
         exit(1)
+        if not recursively_len:
+            recursively_len = 1
     return recursively_len, path, url
 
 def spider_url(recursively, url, path, urls=[]):
@@ -64,12 +66,22 @@ def spider_url(recursively, url, path, urls=[]):
     return urls
 
 def spider_img(url, path, urls=[]):
-    try:
+    # try:
+    if 1:
         os.makedirs(path, exist_ok=True)
         response = requests.get(url, headers=request_headers)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for img in soup.find_all('img', src=True):
-            img_url = urljoin(url, img['src'])
+        images = soup.find_all('img', src=True) + soup.find_all('a', href=True)
+        for img in images:
+            if 'src' in img and img['src']:
+                img_url = urljoin(url, img['src'])
+            elif 'href' in img and img['href']:
+                img_url = urljoin(url, img['href'])
+            else:
+                try:
+                    img_url = urljoin(url, img['src'])
+                except:
+                    continue
             if img_url not in urls and img_url.split('.')[-1].lower() in ['jpg', 'jpeg', 'png', 'gif', 'bmp']:
                 urls.append(img_url)
                 filename = os.path.join(path, img_url.split("/")[-1].split("?")[0])
@@ -78,8 +90,8 @@ def spider_img(url, path, urls=[]):
                     shutil.copyfileobj(img_response.raw, out_file)
                 del img_response
         return urls
-    except Exception as e:
-        print(f"Error: {e} with URL: {url}")
+    # except Exception as e:
+    #     print(f"Error: {e} with URL: {url}")
     return urls
 
 def main():
