@@ -15,8 +15,10 @@ KEY_FILE = Path("ft_otp.key")
 MIN_HEX_KEY_LENGTH = 64
 TIME_STEP_SECONDS = 30
 OTP_DIGITS = 6
+KEY_FILE_MODE = 0o600
 
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+INVALID_HEX_KEY_ERROR = "key must be 64 hexadecimal characters."
 
 
 class OtpError(Exception):
@@ -27,11 +29,11 @@ def normalize_hex_key(value: str) -> str:
     key = value.strip()
 
     if len(key) < MIN_HEX_KEY_LENGTH:
-        raise OtpError("key must be at least 64 hexadecimal characters")
+        raise OtpError(INVALID_HEX_KEY_ERROR)
     if len(key) % 2 != 0:
         raise OtpError("key length must be an even number of hexadecimal characters")
     if any(char not in _HEX_DIGITS for char in key):
-        raise OtpError("key must contain only hexadecimal characters")
+        raise OtpError(INVALID_HEX_KEY_ERROR)
     return key.lower()
 
 
@@ -48,7 +50,9 @@ def save_encrypted_key(hex_key: str, path: str | Path = KEY_FILE) -> None:
     token = Fernet(FERNET_KEY).encrypt(normalize_hex_key(hex_key).encode("ascii"))
 
     try:
-        Path(path).write_bytes(token)
+        key_path = Path(path)
+        key_path.write_bytes(token)
+        key_path.chmod(KEY_FILE_MODE)
     except OSError as exc:
         raise OtpError(str(exc)) from exc
 

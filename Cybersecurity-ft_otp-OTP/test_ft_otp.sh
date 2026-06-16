@@ -26,7 +26,11 @@ echo ""
 
 # -g: reject non-hex input
 out=$("$BIN" -g test_bad.txt 2>&1)
-echo "$out" | grep -q "error" && ok "-g rejects non-hex key" || fail "-g should reject non-hex key"
+if echo "$out" | grep -q "key must be 64 hexadecimal characters."; then
+    ok "-g rejects non-hex key"
+else
+    fail "-g should reject non-hex key"
+fi
 
 # -g: reject missing file
 out=$("$BIN" -g no_such_file.hex 2>&1)
@@ -53,6 +57,14 @@ if [ "$content" != "$TEST_KEY" ]; then
     ok "ft_otp.key is not plaintext"
 else
     fail "ft_otp.key should be encrypted"
+fi
+
+# -g: ft_otp.key is readable only by its owner
+mode=$(python3 -c "from pathlib import Path; print(oct(Path('ft_otp.key').stat().st_mode & 0o777))")
+if [ "$mode" = "0o600" ]; then
+    ok "ft_otp.key has owner-only permissions"
+else
+    fail "ft_otp.key permissions should be 0600 (got: $mode)"
 fi
 
 # -k: generates 6-digit OTP
