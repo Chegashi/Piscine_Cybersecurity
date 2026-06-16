@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export PYTHONDONTWRITEBYTECODE=1
+
+if [ -x "$SCRIPT_DIR/venv/bin/python3" ]; then
+    PYTHON=$SCRIPT_DIR/venv/bin/python3
+else
+    PYTHON=${PYTHON:-python3}
+fi
+
+exec "$PYTHON" "$SCRIPT_DIR/ft_otp.py" "$@"

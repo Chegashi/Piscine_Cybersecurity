@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+venv/
+.DS_Store
+en.subject-*.png
+
+ft_otp.key
+_tmp_cmp.hex
+test_bad.txt
+test_key.hex
