@@ -479,7 +479,7 @@ message = struct.pack(">Q", counter)
 digest = hmac.new(key, message, hashlib.sha1).digest()
 offset = digest[-1] & 0x0F
 binary_code = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
-return str(binary_code % (10**OTP_DIGITS)).zfill(OTP_DIGITS)
+return str(binary_code % (10**6)).zfill(6)
 ```
 
 ## Worked Example With Intermediate Values
@@ -713,7 +713,7 @@ Important points from RFC 6238:
 How this project follows it:
 
 - `totp` uses Unix time from `time.time()`;
-- `TIME_STEP_SECONDS = 30`;
+- `totp` uses the default 30-second time step;
 - `totp` calls `hotp`;
 - `ft_otp.key` is encrypted and owner-readable only.
 
