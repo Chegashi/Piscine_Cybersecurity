@@ -68,18 +68,11 @@ def load_encrypted_key(path: str | Path) -> bytes:
 def hotp(key: bytes, counter: int) -> str:
     counter_bytes = struct.pack(">Q", counter)
     digest = hmac.new(key, counter_bytes, hashlib.sha1).digest()
-    code = _dynamic_truncate(digest)
+    offset = digest[-1] & 0x0F
+    code = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
     return str(code % (10**6)).zfill(6)
 
 
-def _dynamic_truncate(digest: bytes) -> int:
-    """Extract the RFC 4226 31-bit code from an HMAC digest."""
-    offset = digest[-1] & 0x0F
-    four_bytes = digest[offset : offset + 4]
-    return struct.unpack(">I", four_bytes)[0] & 0x7FFFFFFF
-
-
 def totp(key: bytes, timestamp: int | None = None) -> str:
-    if timestamp is None:
-        timestamp = int(time.time())
+    timestamp = int(time.time()) if timestamp is None else timestamp
     return hotp(key, timestamp // 30)
