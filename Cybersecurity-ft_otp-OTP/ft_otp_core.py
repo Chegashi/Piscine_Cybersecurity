@@ -15,6 +15,11 @@ MIN_HEX_KEY_LENGTH = 64
 TIME_STEP_SECONDS = 30
 OTP_DIGITS = 6
 KEY_FILE_MODE = 0o600
+ASCII_ENCODING = "ascii"
+HOTP_COUNTER_FORMAT = ">Q"
+HOTP_CODE_FORMAT = ">I"
+HOTP_OFFSET_MASK = 0x0F
+HOTP_31_BIT_MASK = 0x7FFFFFFF
 
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 INVALID_HEX_KEY_ERROR = "key must be 64 hexadecimal characters."
@@ -38,7 +43,7 @@ def normalize_hex_key(value: str) -> str:
 
 def load_plain_hex_key(path: str | Path) -> str:
     try:
-        return normalize_hex_key(Path(path).read_text(encoding="ascii"))
+        return normalize_hex_key(Path(path).read_text(encoding=ASCII_ENCODING))
     except UnicodeDecodeError as exc:
         raise OtpError("key file must contain ASCII hexadecimal text") from exc
     except OSError as exc:
@@ -46,7 +51,8 @@ def load_plain_hex_key(path: str | Path) -> str:
 
 
 def save_encrypted_key(hex_key: str, path: str | Path = KEY_FILE) -> None:
-    token = Fernet(FERNET_KEY).encrypt(normalize_hex_key(hex_key).encode("ascii"))
+    normalized_key = normalize_hex_key(hex_key).encode(ASCII_ENCODING)
+    token = Fernet(FERNET_KEY).encrypt(normalized_key)
 
     try:
         key_path = Path(path)
@@ -59,8 +65,9 @@ def save_encrypted_key(hex_key: str, path: str | Path = KEY_FILE) -> None:
 def load_encrypted_key(path: str | Path) -> bytes:
     try:
         token = Path(path).read_bytes().strip()
-        decrypted = Fernet(FERNET_KEY).decrypt(token).decode("ascii")
-        return bytes.fromhex(normalize_hex_key(decrypted))
+        decrypted = Fernet(FERNET_KEY).decrypt(token).decode(ASCII_ENCODING)
+        hex_key = normalize_hex_key(decrypted)
+        return bytes.fromhex(hex_key)
     except OSError as exc:
         raise OtpError(str(exc)) from exc
     except (InvalidToken, UnicodeDecodeError, ValueError) as exc:
@@ -68,11 +75,17 @@ def load_encrypted_key(path: str | Path) -> bytes:
 
 
 def hotp(key: bytes, counter: int) -> str:
-    message = struct.pack(">Q", counter)
-    digest = hmac.new(key, message, hashlib.sha1).digest()
-    offset = digest[-1] & 0x0F
-    binary_code = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
-    return str(binary_code % (10**OTP_DIGITS)).zfill(OTP_DIGITS)
+    counter_bytes = struct.pack(HOTP_COUNTER_FORMAT, counter)
+    digest = hmac.new(key, counter_bytes, hashlib.sha1).digest()
+    code = _dynamic_truncate(digest)
+    return str(code % (10**OTP_DIGITS)).zfill(OTP_DIGITS)
+
+
+def _dynamic_truncate(digest: bytes) -> int:
+    """Extract the RFC 4226 31-bit code from an HMAC digest."""
+    offset = digest[-1] & HOTP_OFFSET_MASK
+    four_bytes = digest[offset : offset + 4]
+    return struct.unpack(HOTP_CODE_FORMAT, four_bytes)[0] & HOTP_31_BIT_MASK
 
 
 def totp(key: bytes, timestamp: int | None = None) -> str:
