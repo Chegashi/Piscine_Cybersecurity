@@ -277,38 +277,6 @@ In this project:
 
 This keeps every OTP exactly 6 digits.
 
-### Base32
-
-Base32 is a text encoding for binary data.
-
-Authenticator apps usually expect TOTP secrets inside `otpauth://` QR codes to
-be Base32 encoded. The bonus GUI converts the raw key bytes to Base32 for the QR
-code.
-
-### QR Code
-
-A QR code is a square barcode that can store text.
-
-In this project, the bonus QR code stores an `otpauth://` URI so authenticator
-apps can import the TOTP secret.
-
-### `otpauth://` URI
-
-An `otpauth://` URI is a common format used by authenticator apps.
-
-It can contain:
-
-- OTP type: TOTP or HOTP;
-- account label;
-- issuer name;
-- Base32 secret.
-
-Example shape:
-
-```text
-otpauth://totp/issuer:account?secret=BASE32SECRET&issuer=issuer
-```
-
 ### Fernet
 
 Fernet is an authenticated symmetric encryption format from the Python
@@ -370,18 +338,14 @@ This project returns `0` on success and `1` for user-facing errors.
 
 A Python virtual environment is an isolated folder for Python dependencies.
 
-This project can use `venv/` so dependencies like `cryptography`, `qrcode`, and
-`Pillow` do not need to be installed globally.
+This project can use `venv/` so dependencies like `cryptography` do not need to
+be installed globally.
 
 ### Dependency
 
 A dependency is external code needed by a project.
 
-Here:
-
-- `cryptography` is needed for Fernet encryption;
-- `qrcode[pil]` is needed for the bonus QR code;
-- `Pillow` is pulled in for image handling.
+Here, `cryptography` is needed for Fernet encryption.
 
 ## Algorithm Behind HOTP
 
@@ -675,18 +639,7 @@ It does not implement the cryptographic algorithm directly. It delegates that to
 - `save_encrypted_key`: encrypts the validated key and writes `ft_otp.key`;
 - `load_encrypted_key`: decrypts `ft_otp.key` for `-k`;
 - `hotp`: implements RFC 4226 HOTP;
-- `totp`: implements RFC 6238 TOTP by deriving the HOTP counter from time;
-- `base32_secret`: prepares a Base32 secret for the bonus QR code URI.
-
-### `ft_otp_bonus.py`
-
-`ft_otp_bonus.py` provides the bonus features:
-
-- random seed generation;
-- QR code generation;
-- graphical interface.
-
-The GUI uses the same core HOTP/TOTP implementation as the mandatory CLI.
+- `totp`: implements RFC 6238 TOTP by deriving the HOTP counter from time.
 
 ## Key Handling
 
@@ -906,8 +859,7 @@ secret key is predictable, the OTPs are predictable too.
 How this project relates:
 
 - mandatory mode accepts a user-provided hex key;
-- bonus seed generation uses `secrets.token_hex(32)`;
-- `secrets` is suitable for cryptographic randomness in Python.
+- the user is responsible for creating the key with enough randomness.
 
 The important defense point is: the OTP algorithm is deterministic once the key
 and counter are known. The unpredictability comes from the secret key.
@@ -920,8 +872,7 @@ Useful RFC 4086 sections:
   cryptographic systems.
 
 In this project, the mandatory CLI accepts a user-provided key, so the user is
-responsible for key quality. The bonus GUI improves usability by generating a
-32-byte random key with `secrets.token_hex(32)`.
+responsible for key quality.
 
 ### RFC 6030: PSKC
 
@@ -1260,8 +1211,8 @@ A: In `ft_otp.py`, mainly in `parse_args` and `main`.
 
 **Q: Why separate core logic from CLI logic?**
 
-A: It makes the code easier to read, test, and reuse. The GUI bonus can use the
-same core implementation without duplicating the cryptography.
+A: It makes the code easier to read and test. The cryptographic functions stay
+separate from argument parsing and terminal error handling.
 
 **Q: Why use `Path.read_text(encoding="ascii")` for the key?**
 
@@ -1393,37 +1344,6 @@ current time is too close to a 30-second boundary.
 
 A: Because valid OTPs may be below `100000`. The code pads with zeros to keep
 exactly 6 digits.
-
-### Bonus Questions
-
-**Q: What bonus features are implemented?**
-
-A: The bonus file provides random seed generation, QR code generation, and a
-Tkinter GUI.
-
-**Q: Why use Base32 for the QR secret?**
-
-A: Authenticator apps expect the `otpauth://` URI secret to be Base32 encoded.
-The raw binary key is converted to Base32 for compatibility.
-
-**Q: What is an `otpauth://` URI?**
-
-A: It is the URI format commonly used by authenticator apps. It carries the
-issuer, account name, and Base32 secret so the app can create the TOTP entry.
-
-**Q: Does the QR code contain the encrypted key file?**
-
-A: No. The QR code contains the shared secret in authenticator-compatible form.
-It should be treated as sensitive.
-
-**Q: Why is QR code generation a bonus, not mandatory?**
-
-A: The subject lists QR code creation with seed generation as a bonus feature.
-The mandatory part is the CLI TOTP generator.
-
-**Q: Does the GUI use a different OTP algorithm?**
-
-A: No. It imports the same `ft_otp_core.py` functions as the CLI.
 
 ### Improvement Questions
 

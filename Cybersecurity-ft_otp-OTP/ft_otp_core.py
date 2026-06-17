@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import struct
@@ -80,7 +79,3 @@ def totp(key: bytes, timestamp: int | None = None) -> str:
     if timestamp is None:
         timestamp = int(time.time())
     return hotp(key, timestamp // TIME_STEP_SECONDS)
-
-
-def base32_secret(key: bytes) -> str:
-    return base64.b32encode(key).decode("ascii").rstrip("=")
