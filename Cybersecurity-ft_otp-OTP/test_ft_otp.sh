@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 PASS=0
 FAIL=0
@@ -9,6 +9,7 @@ NC='\033[0m'
 
 BIN=./ft_otp
 KEY_FILE=ft_otp.key
+BASE32_FILE=ft_otp.b32
 VECTOR_SCRIPT=pyotp_test.py
 VECTOR_MODE=${1:-totp}
 VALID_KEY_FILE=test_key.hex
@@ -16,9 +17,11 @@ BAD_KEY_FILE=test_bad.txt
 MISSING_HEX_FILE=no_such_file.hex
 MISSING_KEY_FILE=no_such.key
 EXPECTED_KEY_MODE=0o600
+SUCCESS_MESSAGE="Key was successfully saved in ft_otp.key."
 
 COMMAND_OUTPUT=
 COMMAND_STATUS=0
+BASE32_SNAPSHOT=
 
 if [ -x venv/bin/python3 ]; then
     PYTHON=venv/bin/python3
@@ -60,6 +63,31 @@ random_hex_key() {
     "$PYTHON" -c "import os; print(os.urandom(32).hex())"
 }
 
+base32_key() {
+    "$PYTHON" -c '
+import base64
+import sys
+
+print(base64.b32encode(bytes.fromhex(sys.argv[1])).decode("ascii"))
+' "$1"
+}
+
+file_snapshot() {
+    "$PYTHON" -c '
+from pathlib import Path
+import hashlib
+import sys
+
+path = Path(sys.argv[1])
+if not path.exists():
+    print("missing")
+else:
+    stat = path.stat()
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    print(f"{stat.st_mtime_ns}:{stat.st_size}:{digest}")
+' "$1"
+}
+
 file_mode() {
     "$PYTHON" -c '
 from pathlib import Path
@@ -77,6 +105,17 @@ assert_output_contains() {
     case "$COMMAND_OUTPUT" in
         *"$expected"*) pass "$pass_message" ;;
         *) fail "$fail_message" ;;
+    esac
+}
+
+assert_output_not_contains() {
+    unexpected=$1
+    pass_message=$2
+    fail_message=$3
+
+    case "$COMMAND_OUTPUT" in
+        *"$unexpected"*) fail "$fail_message" ;;
+        *) pass "$pass_message" ;;
     esac
 }
 
@@ -102,6 +141,7 @@ assert_command_failed() {
 }
 
 setup() {
+    BASE32_SNAPSHOT=$(file_snapshot "$BASE32_FILE")
     TEST_KEY=$(random_hex_key)
     printf "%s\n" "$TEST_KEY" > "$VALID_KEY_FILE"
     printf "NEVER GONNA GIVE YOU UP\n" > "$BAD_KEY_FILE"
@@ -133,6 +173,48 @@ test_saves_valid_key() {
         pass "-g exits 0 on valid key"
     else
         fail "-g should exit 0 on valid key"
+    fi
+}
+
+test_prints_success_message() {
+    assert_output_contains \
+        "$SUCCESS_MESSAGE" \
+        "-g prints subject success message" \
+        "-g should print subject success message"
+}
+
+test_does_not_print_base32_by_default() {
+    expected=$(base32_key "$TEST_KEY")
+    assert_output_not_contains \
+        "$expected" \
+        "-g does not print Base32 by default" \
+        "-g should not print Base32 unless enabled"
+}
+
+test_can_print_base32_when_enabled() {
+    expected=$(base32_key "$TEST_KEY")
+    run_command env PYTHONDONTWRITEBYTECODE=1 "$PYTHON" -c '
+import sys
+
+import ft_otp
+
+ft_otp.PRINT_OTP_B32 = True
+raise SystemExit(ft_otp.main(["-g", sys.argv[1]]))
+' "$VALID_KEY_FILE"
+
+    assert_output_contains \
+        "$expected" \
+        "-g can print Base32 key when enabled" \
+        "-g should print Base32 key when enabled"
+}
+
+test_does_not_write_base32_file() {
+    snapshot=$(file_snapshot "$BASE32_FILE")
+
+    if [ "$snapshot" = "$BASE32_SNAPSHOT" ]; then
+        pass "-g does not write ft_otp.b32"
+    else
+        fail "-g should not write ft_otp.b32"
     fi
 }
 
@@ -246,6 +328,10 @@ printf "=== ft_otp tests ===\n\n"
 test_rejects_non_hex_key
 test_rejects_missing_hex_file
 test_saves_valid_key
+test_prints_success_message
+test_does_not_print_base32_by_default
+test_can_print_base32_when_enabled
+test_does_not_write_base32_file
 test_creates_key_file
 test_key_file_is_encrypted
 test_key_file_permissions
