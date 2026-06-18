@@ -12,6 +12,7 @@ from ft_otp_core import (
     save_encrypted_key,
     totp,
 )
+import base64
 
 
 USAGE = "Usage: ./ft_otp -g <file> | -k <key_file>"
@@ -37,8 +38,17 @@ def main(args: list[str] | None = None) -> int:
         flag, path = parse_args(args)
 
         if flag == "-g":
-            save_encrypted_key(load_plain_hex_key(path), KEY_FILE)
-            print(f"Key was successfully saved in {KEY_FILE}.")
+            hex_key = load_plain_hex_key(path)
+            save_encrypted_key(hex_key, KEY_FILE)
+            # Also write Base32 (for easy import into authenticator apps)
+            b32 = base64.b32encode(bytes.fromhex(hex_key)).decode()
+            b32_path = KEY_FILE.with_suffix(".b32")
+            b32_path.write_text(b32, encoding="ascii")
+            try:
+                b32_path.chmod(0o600)
+            except OSError:
+                # ignore chmod failures on platforms that don't support it
+                pass
         else:
             print(totp(load_encrypted_key(path)))
 

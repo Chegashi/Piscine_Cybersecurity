@@ -5,6 +5,5 @@ venv/
 en.subject-*.png
 
 ft_otp.key
-_tmp_cmp.hex
 test_bad.txt
 test_key.hex

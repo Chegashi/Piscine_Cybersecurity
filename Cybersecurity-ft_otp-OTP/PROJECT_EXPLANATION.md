@@ -67,7 +67,7 @@ Common values are:
 
 - `T0 = 0`, the Unix epoch;
 - `X = 30`, a 30-second time step;
-- `digits = 6`, the output length used by this project and by `oathtool` by default.
+- `digits = 6`, the output length used by this project.
 
 This means the same key produces the same OTP during the same 30-second window,
 then a different OTP in the next window.
@@ -79,16 +79,16 @@ This section explains technical words used in this project.
 ### `oathtool`
 
 `oathtool` is a command-line program that can generate and verify HOTP/TOTP
-codes. It is useful as a reference tool.
+codes. It is useful as an optional manual reference tool.
 
-In this project, the test script compares our output with:
+For example:
 
 ```bash
 oathtool --totp "$KEY"
 ```
 
-If our code and `oathtool` receive the same key during the same 30-second time
-window, they should print the same OTP.
+The automated tests do not require `oathtool`. They use public RFC test vectors
+instead.
 
 ### RFC
 
@@ -1316,24 +1316,23 @@ Strong random keys make guessing infeasible.
 
 **Q: How do you know the algorithm is correct?**
 
-A: The test script compares generated OTPs with `oathtool --totp` for fixed and
-random keys. Matching `oathtool` confirms interoperability.
+A: The test script checks HOTP/TOTP against public RFC test vectors. These are
+fixed inputs with known expected OTPs.
 
-**Q: Why compare with `oathtool`?**
+**Q: Why use RFC test vectors?**
 
-A: The subject recommends comparing with reference software. `oathtool` is a
-standard command-line tool for HOTP/TOTP.
+A: They do not require extra system tools, and they verify the implementation
+against published expected values.
 
 **Q: What does the test script check?**
 
 A: It checks invalid input, missing files, successful encrypted key generation,
-key-file permissions, 6-digit output, and multiple `oathtool` comparisons.
+key-file permissions, 6-digit output, and RFC HOTP/TOTP vectors.
 
-**Q: Why can a test fail near a 30-second boundary?**
+**Q: Why avoid `oathtool` in the automated tests?**
 
-A: If this program and `oathtool` run on different sides of a time boundary,
-they may compute different counters. The test runs them close together to reduce
-that risk.
+A: A machine may not have it installed. RFC vectors make the tests portable and
+deterministic.
 
 **Q: How could boundary testing be improved?**
 
@@ -1380,19 +1379,19 @@ A: TOTP is not a separate magic algorithm. It is HOTP where the counter is
 derived from time. The project succeeds if HOTP is correct, time-counter
 derivation is correct, and the secret key is stored encrypted.
 
-## Why the Output Matches `oathtool`
+## Why the Output Matches RFC Vectors
 
-`oathtool --totp <hex-key>` uses the usual TOTP defaults:
+The RFC test vectors use the standard HOTP/TOTP construction:
 
 - HMAC-SHA1;
 - 30-second time step;
 - Unix epoch start;
 - 6 decimal digits.
 
-This project uses the same defaults. Therefore, for the same key and the same
-time window, `./ft_otp -k ft_otp.key` should match `oathtool --totp`.
+This project uses the same defaults. Therefore, for the RFC keys and timestamps,
+`hotp` and `totp` should produce the published expected values.
 
-The test script verifies that comparison across several keys.
+The test script verifies those values through `test/test_vectors.py`.
 
 ## Security Limitations
 
@@ -1426,8 +1425,14 @@ The test script checks:
 - `ft_otp.key` is not plaintext;
 - `ft_otp.key` permissions are `0600`;
 - generated OTP has exactly 6 digits;
-- generated OTP matches `oathtool`;
-- multiple fixed and random keys match `oathtool`.
+- RFC TOTP vectors pass by default.
+
+You can also choose the vector mode:
+
+```bash
+./test_ft_otp.sh hotp
+./test_ft_otp.sh all
+```
 
 ## Main References
 
