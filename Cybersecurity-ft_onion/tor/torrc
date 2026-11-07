@@ -1,10 +1,6 @@
 DataDirectory /var/lib/tor
-Log notice stdout
-
-# No SOCKS proxy: this instance only publishes the service
 SocksPort 0
 
 HiddenServiceDir /var/lib/tor/hidden_service/
-HiddenServiceVersion 3
 HiddenServicePort 80   172.28.0.20:80
 HiddenServicePort 4242 172.28.0.30:4242

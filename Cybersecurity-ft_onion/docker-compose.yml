@@ -1,40 +1,22 @@
 services:
   tor:
     build: ./tor
-    container_name: ft_onion_tor
-    restart: unless-stopped
-    networks:
-      onion_net:
-        ipv4_address: 172.28.0.10
     volumes:
       - tor_keys:/var/lib/tor/hidden_service
-    depends_on:
-      - nginx
-      - ssh
-
+    networks: [onion]
   nginx:
     build: ./nginx
-    container_name: ft_onion_nginx
-    restart: unless-stopped
     networks:
-      onion_net:
-        ipv4_address: 172.28.0.20
-
+      onion: { ipv4_address: 172.28.0.20 }
   ssh:
     build: ./ssh
-    container_name: ft_onion_ssh
-    restart: unless-stopped
     networks:
-      onion_net:
-        ipv4_address: 172.28.0.30
+      onion: { ipv4_address: 172.28.0.30 }
 
 networks:
-  onion_net:
-    driver: bridge
+  onion:
     ipam:
-      config:
-        - subnet: 172.28.0.0/16
+      config: [{ subnet: 172.28.0.0/16 }]
 
 volumes:
   tor_keys:
-    name: ft_onion_tor_keys
