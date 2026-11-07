@@ -1,0 +1,7 @@
+.DS_Store
+*.swp
+*~
+hidden_service/
+ssh/id_*
+ssh/authorized_keys
+.history/

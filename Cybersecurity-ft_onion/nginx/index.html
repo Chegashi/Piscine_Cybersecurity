@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ft_onion · Onion Snake</title>
+<style>
+  :root {
+    --bg: #0d0b14;
+    --panel: #17131f;
+    --grid: #1f1a2b;
+    --fg: #e6e1f0;
+    --muted: #8a809c;
+    --accent: #a46bff;
+    --food: #3ee6a0;
+    --danger: #ff5c7a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: .04em; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: 13px; }
+  .hud {
+    width: 100%; max-width: 480px;
+    display: flex; justify-content: space-between;
+    margin-bottom: 8px; font-size: 14px;
+  }
+  .hud b { color: var(--accent); }
+  .board {
+    position: relative;
+    width: 100%; max-width: 480px;
+    aspect-ratio: 1;
+    background: var(--panel);
+    border: 1px solid var(--grid);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(13, 11, 20, .82);
+    text-align: center; padding: 16px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay h2 { margin: 0 0 8px; font-size: 20px; }
+  .overlay p { margin: 0 0 16px; color: var(--muted); }
+  button {
+    font: inherit; color: var(--bg); background: var(--accent);
+    border: 0; border-radius: 6px; padding: 8px 18px; cursor: pointer;
+  }
+  button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .pad {
+    display: grid; grid-template-columns: repeat(3, 52px); gap: 6px;
+    margin-top: 14px;
+  }
+  .pad button { background: var(--grid); color: var(--fg); padding: 12px 0; }
+  .pad .u { grid-column: 2; }
+  .pad .l { grid-column: 1; grid-row: 2; }
+  .pad .d { grid-column: 2; grid-row: 2; }
+  .pad .r { grid-column: 3; grid-row: 2; }
+  .help { color: var(--muted); font-size: 12px; margin-top: 14px; text-align: center; }
+  noscript {
+    display: block; max-width: 480px; margin-top: 16px; padding: 14px;
+    border: 1px solid var(--grid); border-radius: 8px; color: var(--muted);
+  }
+  @media (hover: hover) and (pointer: fine) { .pad { display: none; } }
+</style>
+</head>
+<body>
+  <h1>ft<span>_</span>onion</h1>
+  <p class="sub">served over a Tor v3 onion service · nginx · no open ports</p>
+
+  <div class="hud">
+    <div>score <b id="score">0</b></div>
+    <div>best <b id="best">0</b></div>
+  </div>
+
+  <div class="board">
+    <canvas id="game" width="480" height="480" aria-label="Snake game board"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="title">Onion Snake</h2>
+      <p id="msg">Eat the onions. Don't bite yourself.</p>
+      <button id="start">Start</button>
+    </div>
+  </div>
+
+  <div class="pad" aria-label="Touch controls">
+    <button class="u" data-dir="up" aria-label="Up">▲</button>
+    <button class="l" data-dir="left" aria-label="Left">◀</button>
+    <button class="d" data-dir="down" aria-label="Down">▼</button>
+    <button class="r" data-dir="right" aria-label="Right">▶</button>
+  </div>
+
+  <p class="help">Arrows / WASD to move · Space to pause · walls wrap around</p>
+
+  <noscript>
+    JavaScript is disabled (Tor Browser "Safest" mode), so the game can't run.
+    You are still connected to this onion service over Tor.
+  </noscript>
+
+<script>
+(function () {
+  "use strict";
+
+  var N = 20;                       // grid cells per side
+  var canvas = document.getElementById("game");
+  var ctx = canvas.getContext("2d");
+  var C = canvas.width / N;         // cell size in px
+  var scoreEl = document.getElementById("score");
+  var bestEl = document.getElementById("best");
+  var overlay = document.getElementById("overlay");
+  var titleEl = document.getElementById("title");
+  var msgEl = document.getElementById("msg");
+  var startBtn = document.getElementById("start");
+
+  var DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  var KEYS = {
+    ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+    w: "up", s: "down", a: "left", d: "right",
+    W: "up", S: "down", A: "left", D: "right"
+  };
+
+  var snake, dir, queue, food, score, timer, running, paused;
+  var best = 0;
+  try { best = +localStorage.getItem("ft_onion_best") || 0; } catch (e) {}
+  bestEl.textContent = best;
+
+  function css(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function reset() {
+    snake = [[10, 10], [9, 10], [8, 10]];
+    dir = DIRS.right;
+    queue = [];
+    score = 0;
+    scoreEl.textContent = 0;
+    placeFood();
+  }
+
+  function placeFood() {
+    var free = [];
+    for (var x = 0; x < N; x++)
+      for (var y = 0; y < N; y++)
+        if (!snake.some(function (p) { return p[0] === x && p[1] === y; }))
+          free.push([x, y]);
+    food = free[Math.floor(Math.random() * free.length)];
+  }
+
+  function speed() { return Math.max(55, 130 - score * 3); }
+
+  function turn(name) {
+    var last = queue.length ? queue[queue.length - 1] : dir;
+    var d = DIRS[name];
+    if (d[0] === -last[0] && d[1] === -last[1]) return;   // no reversing
+    if (d[0] === last[0] && d[1] === last[1]) return;
+    if (queue.length < 3) queue.push(d);
+  }
+
+  function step() {
+    if (queue.length) dir = queue.shift();
+    var head = [(snake[0][0] + dir[0] + N) % N, (snake[0][1] + dir[1] + N) % N];
+    var eating = head[0] === food[0] && head[1] === food[1];
+    var body = eating ? snake : snake.slice(0, -1);
+
+    if (body.some(function (p) { return p[0] === head[0] && p[1] === head[1]; }))
+      return gameOver();
+
+    snake.unshift(head);
+    if (eating) {
+      score++;
+      scoreEl.textContent = score;
+      if (snake.length === N * N) return gameOver(true);
+      placeFood();
+    } else {
+      snake.pop();
+    }
+    draw();
+    timer = setTimeout(step, speed());
+  }
+
+  function draw() {
+    ctx.fillStyle = css("--panel");
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = css("--grid");
+    ctx.lineWidth = 1;
+    for (var i = 1; i < N; i++) {
+      ctx.beginPath(); ctx.moveTo(i * C + .5, 0); ctx.lineTo(i * C + .5, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * C + .5); ctx.lineTo(canvas.width, i * C + .5); ctx.stroke();
+    }
+
+    // food: a little onion (concentric rings)
+    var fx = food[0] * C + C / 2, fy = food[1] * C + C / 2;
+    ctx.fillStyle = css("--food");
+    ctx.beginPath(); ctx.arc(fx, fy, C * .42, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = css("--panel");
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(fx, fy, C * .26, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(fx, fy, C * .1, 0, Math.PI * 2); ctx.stroke();
+
+    var accent = css("--accent");
+    snake.forEach(function (p, idx) {
+      ctx.globalAlpha = idx === 0 ? 1 : Math.max(.35, 1 - idx / (snake.length + 6));
+      ctx.fillStyle = accent;
+      ctx.fillRect(p[0] * C + 2, p[1] * C + 2, C - 4, C - 4);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function show(title, msg, btn) {
+    titleEl.textContent = title;
+    msgEl.textContent = msg;
+    startBtn.textContent = btn;
+    overlay.hidden = false;
+    startBtn.focus();
+  }
+
+  function start() {
+    clearTimeout(timer);
+    reset();
+    draw();
+    overlay.hidden = true;
+    running = true;
+    paused = false;
+    timer = setTimeout(step, speed());
+  }
+
+  function togglePause() {
+    if (!running) return;
+    paused = !paused;
+    if (paused) {
+      clearTimeout(timer);
+      show("Paused", "Score: " + score, "Resume");
+    } else {
+      overlay.hidden = true;
+      timer = setTimeout(step, speed());
+    }
+  }
+
+  function gameOver(won) {
+    running = false;
+    clearTimeout(timer);
+    if (score > best) {
+      best = score;
+      bestEl.textContent = best;
+      try { localStorage.setItem("ft_onion_best", best); } catch (e) {}
+    }
+    draw();
+    show(won ? "You win!" : "Game over", "Score: " + score, "Play again");
+  }
+
+  startBtn.addEventListener("click", function () {
+    if (running && paused) togglePause(); else start();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === " ") { e.preventDefault(); return running ? togglePause() : start(); }
+    var name = KEYS[e.key];
+    if (!name) return;
+    e.preventDefault();
+    if (running && !paused) turn(name);
+  });
+
+  document.querySelectorAll(".pad button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (running && !paused) turn(b.dataset.dir);
+    });
+  });
+
+  reset();
+  draw();
+})();
+</script>
+</body>
+</html>
