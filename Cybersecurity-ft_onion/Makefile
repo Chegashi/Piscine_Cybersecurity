@@ -1,6 +1,7 @@
-KEY   ?= $(HOME)/.ssh/ft_onion_key
-SOCKS ?= 127.0.0.1:9050
-ONION  = docker compose exec -T tor cat /var/lib/tor/hidden_service/hostname
+KEY    ?= $(HOME)/.ssh/ft_onion_key
+ONION   = docker compose exec -T tor cat /var/lib/tor/hidden_service/hostname
+SSH_OPT = -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+          -o "ProxyCommand=nc -X 5 -x 127.0.0.1:9050 %h %p" -p 4242
 
 all: ssh/authorized_keys
 	docker compose up -d --build
@@ -11,16 +12,16 @@ ssh/authorized_keys:
 	cp $(KEY).pub $@
 
 ssh:
-	ssh -o "ProxyCommand=/usr/bin/nc -X 5 -x $(SOCKS) %h %p" -i $(KEY) -p 4242 onion@$$($(ONION))
+	docker compose run --rm -v $(KEY):/key:ro client ssh $(SSH_OPT) -i /key onion@$$($(ONION))
 
 test:
-	@SOCKS=$(SOCKS) bash scripts/tests.sh
+	@KEY=$(KEY) SSH_OPT='$(SSH_OPT)' bash scripts/tests.sh
 
 down:
 	docker compose down
 
 fclean:
-	docker compose down -v --rmi local
+	docker compose --profile client down -v --rmi local
 	rm -f ssh/authorized_keys
 
 re: fclean all

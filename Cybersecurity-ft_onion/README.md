@@ -11,16 +11,17 @@ A static page (nginx, port 80) and an SSH server (port 4242), reachable only as 
 | [ssh/sshd_config](ssh/sshd_config) | SSH on port 4242, key login only for user `onion` |
 | [tor/torrc](tor/torrc) | The onion service: port 80 → nginx, port 4242 → ssh |
 | [docker-compose.yml](docker-compose.yml) | Three containers on a private network, no `ports:` |
+| [client/Dockerfile](client/Dockerfile) | Test-only Tor client (curl, ssh), started only by `make ssh` / `make test` |
 | [Makefile](Makefile), [scripts/tests.sh](scripts/tests.sh) | Run and check everything |
 
 ## Usage
 
-Needs Docker and a local Tor client on `127.0.0.1:9050` (`brew install tor && brew services start tor`).
+Needs only Docker: no root, no Tor installed on the host.
 
 ```bash
 make         # create SSH key if missing, build, start, print the .onion address
-make ssh     # SSH into the server over Tor
-make test    # automated checks
+make ssh     # SSH into the server over Tor (from the client container)
+make test    # check: no host ports, web page and SSH reachable over Tor, root refused
 make down    # stop (keeps the address)
 make fclean  # stop and delete the onion keys (new address next time)
 ```
@@ -36,12 +37,13 @@ make fclean  # stop and delete the onion keys (new address next time)
 - **Tor folder `0700`, owned by `debian-tor`:** Tor refuses to start otherwise.
 - **`usermod -p '*'`:** a new user is locked, and sshd refuses locked accounts even with a valid key.
 - **SSH:** keys only, no root, only user `onion`, 3 tries, no forwarding.
+- **Client container:** tests go through the real Tor network without installing anything on the host. It is not started by `make` and publishes no port.
 
 ## Manual checks
 
 ```bash
 ONION=$(docker compose exec -T tor cat /var/lib/tor/hidden_service/hostname)
-curl --socks5-hostname 127.0.0.1:9050 -I "http://$ONION"   # 200 OK
+docker compose run --rm client curl -sI --socks5-hostname 127.0.0.1:9050 "http://$ONION"   # 200 OK
 docker compose ps                                          # no "->" in PORTS
 docker compose exec ssh sshd -T | grep -E '^(port|permitrootlogin|passwordauthentication) '
 ```
